@@ -79,57 +79,102 @@ var ContributionTile_1 = __importDefault(require("./ContributionTile"));
 var utils_1 = require("../utils");
 function GithubContributionsWidget(_a) {
     var _this = this;
-    var username = _a.username, githubApiKey = _a.githubApiKey;
+    var usernames = _a.usernames, githubApiKey = _a.githubApiKey;
     var _b = (0, react_1.useState)(new Date().getFullYear()), selectedYear = _b[0], setSelectedYear = _b[1];
     var _c = (0, react_1.useState)(false), hasFetched = _c[0], setHasFetched = _c[1];
     var _d = (0, react_1.useState)(null), contributionsData = _d[0], setContributionsData = _d[1];
     (0, react_1.useEffect)(function () {
         var fetchData = function () { return __awaiter(_this, void 0, void 0, function () {
-            var date, data, error_1;
+            var date, data, _i, usernames_1, username, response, error_1;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        _a.trys.push([0, 2, , 3]);
+                        _a.trys.push([0, 5, , 6]);
                         date = (0, utils_1.getDateRange)(selectedYear);
-                        return [4 /*yield*/, (0, utils_1.fetchGitHubContributions)(username, githubApiKey, date.from, date.to)];
+                        data = [];
+                        _i = 0, usernames_1 = usernames;
+                        _a.label = 1;
                     case 1:
-                        data = _a.sent();
+                        if (!(_i < usernames_1.length)) return [3 /*break*/, 4];
+                        username = usernames_1[_i];
+                        return [4 /*yield*/, (0, utils_1.fetchGitHubContributions)(username, githubApiKey, date.from, date.to)];
+                    case 2:
+                        response = _a.sent();
+                        data.push(response);
+                        _a.label = 3;
+                    case 3:
+                        _i++;
+                        return [3 /*break*/, 1];
+                    case 4:
                         setContributionsData(data);
                         setHasFetched(true); // Moved inside the async function, after data is fetched
-                        return [3 /*break*/, 3];
-                    case 2:
+                        return [3 /*break*/, 6];
+                    case 5:
                         error_1 = _a.sent();
                         console.error("Error fetching GitHub contributions:", error_1);
                         setHasFetched(true); // Still set to true even on error, but you might want different handling
-                        return [3 /*break*/, 3];
-                    case 3: return [2 /*return*/];
+                        return [3 /*break*/, 6];
+                    case 6: return [2 /*return*/];
                 }
             });
         }); };
-        setHasFetched(false); // Reset loading state when year changes
+        setHasFetched(true); // Reset loading state when year changes
         fetchData();
     }, [selectedYear]);
     if (!hasFetched)
         return react_1.default.createElement("div", null, "Fetching github contributions...");
     if (!contributionsData)
         return react_1.default.createElement("div", null, "No data available");
-    var calendar = contributionsData.data.repositoryOwner.contributionsCollection
-        .contributionCalendar;
-    var availableYears = contributionsData.data.repositoryOwner.contributionsCollection
-        .contributionYears;
+    // Merge calendar data from all users
+    var mergedCalendar = contributionsData.reduce(function (merged, userData) {
+        var calendar = userData.data.repositoryOwner.contributionsCollection
+            .contributionCalendar;
+        if (!merged.weeks) {
+            // Initialize with first user's data
+            return calendar;
+        }
+        // Merge contribution counts for each day
+        calendar.weeks.forEach(function (week, weekIndex) {
+            week.contributionDays.forEach(function (day, dayIndex) {
+                merged.weeks[weekIndex].contributionDays[dayIndex].contributionCount +=
+                    day.contributionCount;
+                // Update color based on new contribution count
+                merged.weeks[weekIndex].contributionDays[dayIndex].color =
+                    (0, utils_1.getColorForCount)(merged.weeks[weekIndex].contributionDays[dayIndex].contributionCount);
+            });
+        });
+        return merged;
+    }, {});
+    // Get available years (full range from earliest to latest year across all users)
+    var availableYears = contributionsData.reduce(function (years, userData) {
+        var userYears = userData.data.repositoryOwner.contributionsCollection.contributionYears;
+        var minYear = Math.min.apply(Math, userYears);
+        var maxYear = Math.max.apply(Math, userYears);
+        if (years.length === 0) {
+            // Initialize with first user's range
+            return Array.from({ length: maxYear - minYear + 1 }, function (_, i) { return minYear + i; });
+        }
+        // Expand range if necessary
+        var currentMin = Math.min.apply(Math, years);
+        var currentMax = Math.max.apply(Math, years);
+        var newMin = Math.min(currentMin, minYear);
+        var newMax = Math.max(currentMax, maxYear);
+        return Array.from({ length: newMax - newMin + 1 }, function (_, i) { return newMin + i; });
+    }, []);
     return (react_1.default.createElement("div", { style: {
             display: "flex",
             flexDirection: "column",
             gap: "1rem",
-            marginTop: "2.5rem",
+            width: "fit-content", // Add this line to contain the widget
         } },
-        react_1.default.createElement("div", { style: { fontSize: "1.125rem", fontWeight: 500 } }, (0, utils_1.getSummaryText)(selectedYear, contributionsData)),
         react_1.default.createElement("select", { value: selectedYear, onChange: function (e) { return setSelectedYear(Number(e.target.value)); }, style: {
                 padding: "0.5rem",
                 borderRadius: "0.25rem",
                 border: "1px solid",
                 borderColor: "#d1d5db",
                 backgroundColor: "transparent",
-            } }, availableYears.map(function (year) { return (react_1.default.createElement("option", { key: year, value: year }, year)); })),
-        react_1.default.createElement("div", { style: { display: "flex", gap: "2px" } }, calendar.weeks.map(function (week) { return (react_1.default.createElement("div", { key: week.firstDay, style: { display: "flex", flexDirection: "column", gap: "2px" } }, week.contributionDays.map(function (day) { return (react_1.default.createElement(ContributionTile_1.default, { key: day.date, contributionCount: day.contributionCount, color: day.color, date: day.date })); }))); }))));
+                width: "12%",
+            } }, availableYears.reverse().map(function (year) { return (react_1.default.createElement("option", { key: year, value: year }, year)); })),
+        react_1.default.createElement("div", { style: { display: "flex", gap: "2px" } }, mergedCalendar.weeks.map(function (week) { return (react_1.default.createElement("div", { key: week.firstDay, style: { display: "flex", flexDirection: "column", gap: "2px" } }, week.contributionDays.map(function (day) { return (react_1.default.createElement(ContributionTile_1.default, { key: day.date, contributionCount: day.contributionCount, color: day.color, date: day.date })); }))); })),
+        react_1.default.createElement("div", { style: { fontSize: "1.125rem", fontWeight: 500 } }, (0, utils_1.getSummaryText)(selectedYear, contributionsData))));
 }

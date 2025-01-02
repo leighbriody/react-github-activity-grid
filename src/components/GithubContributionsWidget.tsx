@@ -157,7 +157,13 @@ export default function GithubContributionsWidget({
           </div>
         ))}
       </div>
-      <div style={{ fontSize: "1.125rem", fontWeight: 500 }}>
+      <div
+        style={{
+          fontSize: "0.875rem",
+          fontWeight: 400,
+          color: "#57606a",
+        }}
+      >
         {getSummaryText(selectedYear, contributionsData)}
       </div>
     </div>

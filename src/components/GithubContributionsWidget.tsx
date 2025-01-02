@@ -10,34 +10,42 @@ import {
 import ContributionTile from "./ContributionTile";
 import {
   fetchGitHubContributions,
+  getColorForCount,
   getDateRange,
   getSummaryText,
 } from "../utils";
 
 interface GithubContributionsWidgetProps {
-  username: string;
+  usernames: string[];
   githubApiKey: string;
 }
 
 export default function GithubContributionsWidget({
-  username,
+  usernames,
   githubApiKey,
 }: GithubContributionsWidgetProps) {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [hasFetched, setHasFetched] = useState(false);
-  const [contributionsData, setContributionsData] =
-    useState<GitHubContributionsData | null>(null);
+  const [contributionsData, setContributionsData] = useState<
+    GitHubContributionsData[] | null
+  >(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const date = getDateRange(selectedYear);
-        const data = await fetchGitHubContributions(
-          username,
-          githubApiKey,
-          date.from,
-          date.to
-        );
+
+        let data = [] as GitHubContributionsData[];
+        for (const username of usernames) {
+          const response = await fetchGitHubContributions(
+            username,
+            githubApiKey,
+            date.from,
+            date.to
+          );
+          data.push(response);
+        }
+
         setContributionsData(data);
         setHasFetched(true); // Moved inside the async function, after data is fetched
       } catch (error) {
@@ -46,20 +54,63 @@ export default function GithubContributionsWidget({
       }
     };
 
-    setHasFetched(false); // Reset loading state when year changes
+    setHasFetched(true); // Reset loading state when year changes
     fetchData();
   }, [selectedYear]);
 
   if (!hasFetched) return <div>Fetching github contributions...</div>;
   if (!contributionsData) return <div>No data available</div>;
 
-  const calendar =
-    contributionsData.data.repositoryOwner.contributionsCollection
-      .contributionCalendar;
+  // Merge calendar data from all users
+  const mergedCalendar = contributionsData.reduce((merged, userData) => {
+    const calendar =
+      userData.data.repositoryOwner.contributionsCollection
+        .contributionCalendar;
 
-  const availableYears =
-    contributionsData.data.repositoryOwner.contributionsCollection
-      .contributionYears;
+    if (!merged.weeks) {
+      // Initialize with first user's data
+      return calendar;
+    }
+
+    // Merge contribution counts for each day
+    calendar.weeks.forEach((week, weekIndex) => {
+      week.contributionDays.forEach((day, dayIndex) => {
+        merged.weeks[weekIndex].contributionDays[dayIndex].contributionCount +=
+          day.contributionCount;
+        // Update color based on new contribution count
+        merged.weeks[weekIndex].contributionDays[dayIndex].color =
+          getColorForCount(
+            merged.weeks[weekIndex].contributionDays[dayIndex].contributionCount
+          );
+      });
+    });
+
+    return merged;
+  }, {} as (typeof contributionsData)[0]["data"]["repositoryOwner"]["contributionsCollection"]["contributionCalendar"]);
+
+  // Get available years (full range from earliest to latest year across all users)
+  const availableYears = contributionsData.reduce((years, userData) => {
+    const userYears =
+      userData.data.repositoryOwner.contributionsCollection.contributionYears;
+    const minYear = Math.min(...userYears);
+    const maxYear = Math.max(...userYears);
+
+    if (years.length === 0) {
+      // Initialize with first user's range
+      return Array.from(
+        { length: maxYear - minYear + 1 },
+        (_, i) => minYear + i
+      );
+    }
+
+    // Expand range if necessary
+    const currentMin = Math.min(...years);
+    const currentMax = Math.max(...years);
+    const newMin = Math.min(currentMin, minYear);
+    const newMax = Math.max(currentMax, maxYear);
+
+    return Array.from({ length: newMax - newMin + 1 }, (_, i) => newMin + i);
+  }, [] as number[]);
 
   return (
     <div
@@ -67,13 +118,9 @@ export default function GithubContributionsWidget({
         display: "flex",
         flexDirection: "column",
         gap: "1rem",
-        marginTop: "2.5rem",
+        width: "fit-content", // Add this line to contain the widget
       }}
     >
-      <div style={{ fontSize: "1.125rem", fontWeight: 500 }}>
-        {getSummaryText(selectedYear, contributionsData)}
-      </div>
-
       <select
         value={selectedYear}
         onChange={(e) => setSelectedYear(Number(e.target.value))}
@@ -83,9 +130,10 @@ export default function GithubContributionsWidget({
           border: "1px solid",
           borderColor: "#d1d5db",
           backgroundColor: "transparent",
+          width: "12%",
         }}
       >
-        {availableYears.map((year: number) => (
+        {availableYears.reverse().map((year: number) => (
           <option key={year} value={year}>
             {year}
           </option>
@@ -93,7 +141,7 @@ export default function GithubContributionsWidget({
       </select>
 
       <div style={{ display: "flex", gap: "2px" }}>
-        {calendar.weeks.map((week: ContributionWeek) => (
+        {mergedCalendar.weeks.map((week: ContributionWeek) => (
           <div
             key={week.firstDay}
             style={{ display: "flex", flexDirection: "column", gap: "2px" }}
@@ -108,6 +156,9 @@ export default function GithubContributionsWidget({
             ))}
           </div>
         ))}
+      </div>
+      <div style={{ fontSize: "1.125rem", fontWeight: 500 }}>
+        {getSummaryText(selectedYear, contributionsData)}
       </div>
     </div>
   );

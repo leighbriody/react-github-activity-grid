@@ -22,12 +22,6 @@ import { GithubContributionsWidget } from "react-github-activity-grid";
     githubApiKey={<your github account api key>}
 />;
 ```
-
-## 📝 Note
-
-👀 Important: The GitHub GraphQL API does not currently include contributions to private repositories.
-As a result, you might notice a small discrepancy between the contributions shown on your GitHub profile and this widget's data.
-
 💡 Learn more in this GitHub discussion: [here](https://github.com/orgs/community/discussions/24812).
 
 ## 🤝 Contribute
